@@ -31,7 +31,7 @@ if [[ "${AC5_RUNNING:-false}" == "true" ]]; then
   # ═══════════════════════════════════════════════════════════
   # CONFIGURABLE VARIABLES (edit these for hot-reload)
   # ═══════════════════════════════════════════════════════════
-  VERSION="7.3.4"
+  VERSION="7.3.5"
   
   # Hardening & safety
   AUTO_RESOLVE_SELF_CONFLICT=true   # Try to auto-resolve conflicts in this script
@@ -735,13 +735,39 @@ network_retry() {
       printf "%b║%b                                                              %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
       printf "%b║%b  Windows will remember credentials in Credential Manager.    %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
       printf "%b║%b                                                              %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
-      printf "%b║%b  %b>>> Continuing in OFFLINE MODE (local commits only) <<<%b    %b║%b\n" "$C_RED" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b  %bAfter configuring credentials, restart this script.%b        %b║%b\n" "$C_RED" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_RED" "$C_RESET"
       printf "%b╚══════════════════════════════════════════════════════════════╝%b\n" "$C_RED" "$C_RESET"
       printf "\n"
+      printf "%b>>> Waiting... Configure credentials and restart script <<<\n%b" "$C_YELLOW" "$C_RESET"
       
-      # Set global flag to disable network operations
-      export ADG_OFFLINE_MODE=true
-      return 3  # Special code: auth failure - don't retry!
+      # Just sleep forever - user needs to restart after configuring credentials
+      while true; do sleep 3600; done
+    fi
+
+    # Check for "no upstream branch" - auto-fix it!
+    if echo "$git_output" | grep -qiE 'has no upstream branch|--set-upstream'; then
+      local current_branch=$($GIT branch --show-current 2>/dev/null)
+      if [[ -n "$current_branch" ]]; then
+        info "🔧 Auto-fixing: setting upstream for branch '$current_branch'..."
+        if $GIT push --set-upstream origin "$current_branch" 2>/dev/null; then
+          ok "Upstream set! Retrying $desc..."
+          continue  # Retry immediately
+        else
+          warn "Could not set upstream, will retry..."
+        fi
+      fi
+    fi
+
+    # Check for "does not exist on remote" - create it!
+    if echo "$git_output" | grep -qiE "src refspec.*does not match any|error: failed to push"; then
+      local current_branch=$($GIT branch --show-current 2>/dev/null)
+      if [[ -n "$current_branch" ]]; then
+        info "🔧 Auto-fixing: pushing new branch '$current_branch' to origin..."
+        if $GIT push -u origin "$current_branch" 2>/dev/null; then
+          ok "Branch pushed! $desc succeeded"
+          return 0
+        fi
+      fi
     fi
 
     # ═══════════════════════════════════════════════════════════
