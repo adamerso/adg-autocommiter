@@ -31,7 +31,7 @@ if [[ "${AC5_RUNNING:-false}" == "true" ]]; then
   # ═══════════════════════════════════════════════════════════
   # CONFIGURABLE VARIABLES (edit these for hot-reload)
   # ═══════════════════════════════════════════════════════════
-  VERSION="7.3.10"
+  VERSION="7.3.11"
   
   # Hardening & safety
   AUTO_RESOLVE_SELF_CONFLICT=true   # Try to auto-resolve conflicts in this script
@@ -1182,9 +1182,14 @@ check_github_update() {
   
   log "🌐 Checking GitHub for updates..."
   
-  # Fetch remote VERSION with timeout
-  local remote_version
-  remote_version=$(curl -sL --connect-timeout 5 --max-time 10 "$version_url" 2>/dev/null | tr -d '\r\n ')
+  # Fetch remote VERSION with timeout - prefer wget (available on Windows)
+  local remote_version=""
+  
+  if command -v wget &>/dev/null; then
+    remote_version=$(wget -q --timeout=10 -O - "$version_url" 2>/dev/null | tr -d '\r\n ')
+  elif command -v curl &>/dev/null; then
+    remote_version=$(curl -sL --connect-timeout 5 --max-time 10 "$version_url" 2>/dev/null | tr -d '\r\n ')
+  fi
   
   if [[ -z "$remote_version" ]]; then
     log "Could not fetch remote version (network issue?)"
@@ -1206,30 +1211,27 @@ check_github_update() {
     
     info "Downloading new version from GitHub..."
     
-    # Download to temp file first
+    # Download to temp file first - prefer wget
     local tmp_script="${SCRIPT_FILE}.github-update.tmp"
-    local curl_exit=0
-    local curl_output=""
+    local download_ok=false
     
-    # Try curl with verbose error capture
-    curl_output=$(curl -sL --connect-timeout 10 --max-time 60 -w "%{http_code}" "$script_url" -o "$tmp_script" 2>&1)
-    curl_exit=$?
-    
-    # Debug output
-    if [[ $curl_exit -ne 0 ]]; then
-      warn "curl failed with exit code: $curl_exit"
-      warn "curl output: $curl_output"
-      
-      # Try wget as fallback
-      if command -v wget &>/dev/null; then
-        info "Trying wget as fallback..."
-        if wget -q --timeout=30 -O "$tmp_script" "$script_url" 2>/dev/null; then
-          curl_exit=0
-        fi
+    # Try wget first (available on Windows/Cygwin)
+    if command -v wget &>/dev/null; then
+      if wget -q --timeout=30 -O "$tmp_script" "$script_url" 2>/dev/null; then
+        download_ok=true
+      else
+        warn "wget failed, trying curl..."
       fi
     fi
     
-    if [[ $curl_exit -eq 0 ]] && [[ -f "$tmp_script" ]] && [[ -s "$tmp_script" ]]; then
+    # Fallback to curl
+    if [[ "$download_ok" != "true" ]] && command -v curl &>/dev/null; then
+      if curl -sL --connect-timeout 10 --max-time 60 "$script_url" -o "$tmp_script" 2>/dev/null; then
+        download_ok=true
+      fi
+    fi
+    
+    if [[ "$download_ok" == "true" ]] && [[ -f "$tmp_script" ]] && [[ -s "$tmp_script" ]]; then
       # Verify download - check if it has VERSION string
       if grep -q "^  VERSION=" "$tmp_script" 2>/dev/null; then
         # Check syntax
