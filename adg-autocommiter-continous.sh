@@ -31,7 +31,7 @@ if [[ "${AC5_RUNNING:-false}" == "true" ]]; then
   # ═══════════════════════════════════════════════════════════
   # CONFIGURABLE VARIABLES (edit these for hot-reload)
   # ═══════════════════════════════════════════════════════════
-  VERSION="7.3.6"
+  VERSION="7.3.7"
   
   # Hardening & safety
   AUTO_RESOLVE_SELF_CONFLICT=true   # Try to auto-resolve conflicts in this script
@@ -505,24 +505,27 @@ ensure_remote_access() {
   local out
   out=$($GIT ls-remote --heads origin 2>&1) && return 0
   
-  # Check for HTTPS credential issues
+  # Check for HTTPS credential issues - suggest SSH!
   if echo "$out" | grep -qiE 'could not read Username|terminal prompts disabled|askpass'; then
+    local remote_url=$($GIT remote get-url origin 2>/dev/null || echo "")
+    local ssh_url=""
+    if [[ "$remote_url" =~ https://github\.com/([^/]+)/([^/]+)(\.git)?$ ]]; then
+      ssh_url="git@github.com:${BASH_REMATCH[1]}/${BASH_REMATCH[2]}.git"
+    fi
+    
     printf "\n"
     printf "%b╔══════════════════════════════════════════════════════════════╗%b\n" "$C_RED" "$C_RESET"
     printf "%b║%b  ⚠️  GIT AUTHENTICATION REQUIRED                              %b║%b\n" "$C_RED" "$C_YELLOW" "$C_RED" "$C_RESET"
     printf "%b╠══════════════════════════════════════════════════════════════╣%b\n" "$C_RED" "$C_RESET"
-    printf "%b║%b  Git cannot connect to GitHub - credentials not configured   %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
+    printf "%b║%b  Git cannot connect to GitHub - SSH key not configured       %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
     printf "%b║%b                                                              %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
-    printf "%b║%b  %bRun these commands in terminal:%b                             %b║%b\n" "$C_RED" "$C_RESET" "$C_GREEN" "$C_RESET" "$C_RED" "$C_RESET"
-    printf "%b║%b                                                              %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
-    printf "%b║%b  %bgit config --global credential.helper manager%b              %b║%b\n" "$C_RED" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_RED" "$C_RESET"
-    printf "%b║%b  %bgit fetch origin%b                                           %b║%b\n" "$C_RED" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_RED" "$C_RESET"
-    printf "%b║%b                                                              %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
-    printf "%b║%b  Then enter your GitHub username and PAT (Personal Access   %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
-    printf "%b║%b  Token) as password. Get PAT at:                            %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
-    printf "%b║%b  %bhttps://github.com/settings/tokens%b                         %b║%b\n" "$C_RED" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_RED" "$C_RESET"
-    printf "%b║%b                                                              %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
-    printf "%b║%b  Windows will remember credentials in Credential Manager.   %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
+    printf "%b║%b  %b1. Generate SSH key:%b  ssh-keygen -t ed25519                %b║%b\n" "$C_RED" "$C_RESET" "$C_GREEN" "$C_RESET" "$C_RED" "$C_RESET"
+    printf "%b║%b  %b2. Copy public key:%b   cat ~/.ssh/id_ed25519.pub            %b║%b\n" "$C_RED" "$C_RESET" "$C_GREEN" "$C_RESET" "$C_RED" "$C_RESET"
+    printf "%b║%b  %b3. Add to GitHub:%b     https://github.com/settings/ssh/new  %b║%b\n" "$C_RED" "$C_RESET" "$C_GREEN" "$C_RESET" "$C_RED" "$C_RESET"
+    if [[ -n "$ssh_url" ]]; then
+      printf "%b║%b  %b4. Switch to SSH:%b     git remote set-url origin           %b║%b\n" "$C_RED" "$C_RESET" "$C_GREEN" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b                        %b%s%b  %b║%b\n" "$C_RED" "$C_RESET" "$C_CYAN" "$ssh_url" "$C_RESET" "$C_RED" "$C_RESET"
+    fi
     printf "%b╚══════════════════════════════════════════════════════════════╝%b\n" "$C_RED" "$C_RESET"
     printf "\n"
     warn "Continuing in offline mode (local commits only)..."
@@ -718,27 +721,41 @@ network_retry() {
 
     # Check for authentication errors - DON'T RETRY, show help!
     if echo "$git_output" | grep -qiE 'could not read Username|terminal prompts disabled|askpass|authentication failed|invalid credentials'; then
+      # Get current remote URL to show in instructions
+      local remote_url=$($GIT remote get-url origin 2>/dev/null || echo "")
+      local ssh_url=""
+      
+      # Convert HTTPS to SSH URL for display
+      if [[ "$remote_url" =~ https://github\.com/([^/]+)/([^/]+)(\.git)?$ ]]; then
+        ssh_url="git@github.com:${BASH_REMATCH[1]}/${BASH_REMATCH[2]}.git"
+      fi
+      
       printf "\n"
       printf "%b╔══════════════════════════════════════════════════════════════╗%b\n" "$C_RED" "$C_RESET"
       printf "%b║%b  ⚠️  GIT AUTHENTICATION REQUIRED                              %b║%b\n" "$C_RED" "$C_YELLOW" "$C_RED" "$C_RESET"
       printf "%b╠══════════════════════════════════════════════════════════════╣%b\n" "$C_RED" "$C_RESET"
-      printf "%b║%b  Git cannot connect to GitHub - credentials not configured   %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b  Git cannot connect to GitHub - SSH key not configured       %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
       printf "%b║%b                                                              %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
-      printf "%b║%b  %bRun these commands in another terminal:%b                     %b║%b\n" "$C_RED" "$C_RESET" "$C_GREEN" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b  %b1. Generate SSH key (if you don't have one):%b               %b║%b\n" "$C_RED" "$C_RESET" "$C_GREEN" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b     %bssh-keygen -t ed25519 -C \"your@email.com\"%b               %b║%b\n" "$C_RED" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_RED" "$C_RESET"
       printf "%b║%b                                                              %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
-      printf "%b║%b  %bgit config --global credential.helper manager%b              %b║%b\n" "$C_RED" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_RED" "$C_RESET"
-      printf "%b║%b  %bgit fetch origin%b                                           %b║%b\n" "$C_RED" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b  %b2. Copy your public key:%b                                    %b║%b\n" "$C_RED" "$C_RESET" "$C_GREEN" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b     %bcat ~/.ssh/id_ed25519.pub%b                                %b║%b\n" "$C_RED" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_RED" "$C_RESET"
       printf "%b║%b                                                              %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
-      printf "%b║%b  Then enter your GitHub username and PAT (Personal Access    %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
-      printf "%b║%b  Token) as password. Get PAT at:                             %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
-      printf "%b║%b  %bhttps://github.com/settings/tokens%b                         %b║%b\n" "$C_RED" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b  %b3. Add key to GitHub:%b                                       %b║%b\n" "$C_RED" "$C_RESET" "$C_GREEN" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b     %bhttps://github.com/settings/ssh/new%b                      %b║%b\n" "$C_RED" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_RED" "$C_RESET"
       printf "%b║%b                                                              %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
-      printf "%b║%b  Windows will remember credentials in Credential Manager.    %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b  %b4. Switch repo to SSH:%b                                      %b║%b\n" "$C_RED" "$C_RESET" "$C_GREEN" "$C_RESET" "$C_RED" "$C_RESET"
+      if [[ -n "$ssh_url" ]]; then
+        printf "%b║%b     %bgit remote set-url origin %s%b  %b║%b\n" "$C_RED" "$C_RESET" "$C_CYAN" "$ssh_url" "$C_RESET" "$C_RED" "$C_RESET"
+      else
+        printf "%b║%b     %bgit remote set-url origin git@github.com:USER/REPO.git%b %b║%b\n" "$C_RED" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_RED" "$C_RESET"
+      fi
       printf "%b║%b                                                              %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
-      printf "%b║%b  %bAfter configuring credentials, restart this script.%b        %b║%b\n" "$C_RED" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b  %bAfter setup, restart this script.%b                          %b║%b\n" "$C_RED" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_RED" "$C_RESET"
       printf "%b╚══════════════════════════════════════════════════════════════╝%b\n" "$C_RED" "$C_RESET"
       printf "\n"
-      printf "%b>>> Waiting... Configure credentials and restart script <<<\n%b" "$C_YELLOW" "$C_RESET"
+      printf "%b>>> Waiting... Configure SSH and restart script <<<\n%b" "$C_YELLOW" "$C_RESET"
       
       # Just sleep forever - user needs to restart after configuring credentials
       while true; do sleep 3600; done
