@@ -1007,8 +1007,8 @@ ensure_self_gitignore() {
   script_name="$(basename "$SCRIPT_FILE")"
   local gitignore_path="${GIT_ROOT}/.gitignore"
   
-  # Also ignore trampoline files
-  local patterns=("$script_name" ".gowno_*.sh")
+  # Ignore: script, trampoline files, and Windows launcher
+  local patterns=("$script_name" ".gowno_*.sh" "adg-autocommiter-launcher.cmd")
   
   local added=0
   
