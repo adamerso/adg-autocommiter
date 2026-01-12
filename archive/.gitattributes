@@ -1,0 +1,2 @@
+*.sh text eol=lf
+adasio/scripts/adg-autocommiter/adg-auto-commiter-UpNext.sh merge=ours
