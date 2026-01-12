@@ -31,7 +31,7 @@ if [[ "${AC5_RUNNING:-false}" == "true" ]]; then
   # ═══════════════════════════════════════════════════════════
   # CONFIGURABLE VARIABLES (edit these for hot-reload)
   # ═══════════════════════════════════════════════════════════
-  VERSION="7.3.1"
+  VERSION="7.3.4"
   
   # Hardening & safety
   AUTO_RESOLVE_SELF_CONFLICT=true   # Try to auto-resolve conflicts in this script
@@ -714,6 +714,34 @@ network_retry() {
       echo "$git_output" | head -20
       echo "└───────────────────────────────────────────────────────────────┘"
       return 2  # Special code: non-fast-forward
+    fi
+
+    # Check for authentication errors - DON'T RETRY, show help!
+    if echo "$git_output" | grep -qiE 'could not read Username|terminal prompts disabled|askpass|authentication failed|invalid credentials'; then
+      printf "\n"
+      printf "%b╔══════════════════════════════════════════════════════════════╗%b\n" "$C_RED" "$C_RESET"
+      printf "%b║%b  ⚠️  GIT AUTHENTICATION REQUIRED                              %b║%b\n" "$C_RED" "$C_YELLOW" "$C_RED" "$C_RESET"
+      printf "%b╠══════════════════════════════════════════════════════════════╣%b\n" "$C_RED" "$C_RESET"
+      printf "%b║%b  Git cannot connect to GitHub - credentials not configured   %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b                                                              %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b  %bRun these commands in another terminal:%b                     %b║%b\n" "$C_RED" "$C_RESET" "$C_GREEN" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b                                                              %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b  %bgit config --global credential.helper manager%b              %b║%b\n" "$C_RED" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b  %bgit fetch origin%b                                           %b║%b\n" "$C_RED" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b                                                              %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b  Then enter your GitHub username and PAT (Personal Access    %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b  Token) as password. Get PAT at:                             %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b  %bhttps://github.com/settings/tokens%b                         %b║%b\n" "$C_RED" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b                                                              %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b  Windows will remember credentials in Credential Manager.    %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b                                                              %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b║%b  %b>>> Continuing in OFFLINE MODE (local commits only) <<<%b    %b║%b\n" "$C_RED" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_RED" "$C_RESET"
+      printf "%b╚══════════════════════════════════════════════════════════════╝%b\n" "$C_RED" "$C_RESET"
+      printf "\n"
+      
+      # Set global flag to disable network operations
+      export ADG_OFFLINE_MODE=true
+      return 3  # Special code: auth failure - don't retry!
     fi
 
     # ═══════════════════════════════════════════════════════════
