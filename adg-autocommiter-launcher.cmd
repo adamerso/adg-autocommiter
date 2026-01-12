@@ -42,26 +42,46 @@ echo %YELLOW%[1/3]%RESET% Searching for Cygwin installation...
 set "CYGWIN_ROOT="
 set "MINTTY="
 
-:: List of possible Cygwin locations
-set "CYGWIN_PATHS="
-set "CYGWIN_PATHS=%CYGWIN_PATHS% %USERPROFILE%\cygwin64"
-set "CYGWIN_PATHS=%CYGWIN_PATHS% %USERPROFILE%\cygwin"
-set "CYGWIN_PATHS=%CYGWIN_PATHS% C:\cygwin64"
-set "CYGWIN_PATHS=%CYGWIN_PATHS% C:\cygwin"
-set "CYGWIN_PATHS=%CYGWIN_PATHS% D:\cygwin64"
-set "CYGWIN_PATHS=%CYGWIN_PATHS% D:\cygwin"
-set "CYGWIN_PATHS=%CYGWIN_PATHS% C:\Program Files\cygwin64"
-set "CYGWIN_PATHS=%CYGWIN_PATHS% C:\Program Files\cygwin"
-set "CYGWIN_PATHS=%CYGWIN_PATHS% C:\Program Files (x86)\cygwin64"
-set "CYGWIN_PATHS=%CYGWIN_PATHS% C:\Program Files (x86)\cygwin"
-
-for %%P in (%CYGWIN_PATHS%) do (
-    if exist "%%~P\bin\mintty.exe" (
-        set "CYGWIN_ROOT=%%~P"
-        set "MINTTY=%%~P\bin\mintty.exe"
-        echo %GREEN%  Found Cygwin: %%~P%RESET%
-        goto :found_cygwin
-    )
+:: Check each location one by one
+if exist "%USERPROFILE%\cygwin64\bin\mintty.exe" (
+    set "CYGWIN_ROOT=%USERPROFILE%\cygwin64"
+    goto :found_cygwin
+)
+if exist "%USERPROFILE%\cygwin\bin\mintty.exe" (
+    set "CYGWIN_ROOT=%USERPROFILE%\cygwin"
+    goto :found_cygwin
+)
+if exist "C:\cygwin64\bin\mintty.exe" (
+    set "CYGWIN_ROOT=C:\cygwin64"
+    goto :found_cygwin
+)
+if exist "C:\cygwin\bin\mintty.exe" (
+    set "CYGWIN_ROOT=C:\cygwin"
+    goto :found_cygwin
+)
+if exist "D:\cygwin64\bin\mintty.exe" (
+    set "CYGWIN_ROOT=D:\cygwin64"
+    goto :found_cygwin
+)
+if exist "D:\cygwin\bin\mintty.exe" (
+    set "CYGWIN_ROOT=D:\cygwin"
+    goto :found_cygwin
+)
+if exist "C:\Program Files\cygwin64\bin\mintty.exe" (
+    set "CYGWIN_ROOT=C:\Program Files\cygwin64"
+    goto :found_cygwin
+)
+if exist "C:\Program Files\cygwin\bin\mintty.exe" (
+    set "CYGWIN_ROOT=C:\Program Files\cygwin"
+    goto :found_cygwin
+)
+if exist "C:\Program Files (x86)\cygwin64\bin\mintty.exe" (
+    set "CYGWIN_ROOT=C:\Program Files (x86)\cygwin64"
+    goto :found_cygwin
+)
+if exist "C:\Program Files (x86)\cygwin\bin\mintty.exe" (
+    set "CYGWIN_ROOT=C:\Program Files (x86)\cygwin"
+    goto :found_cygwin
 )
 
 :: Not found - show error
@@ -69,17 +89,21 @@ echo.
 echo %RED%ERROR: Cygwin not found!%RESET%
 echo.
 echo Searched in:
-for %%P in (%CYGWIN_PATHS%) do (
-    echo   - %%~P
-)
+echo   - %USERPROFILE%\cygwin64
+echo   - %USERPROFILE%\cygwin
+echo   - C:\cygwin64, C:\cygwin
+echo   - D:\cygwin64, D:\cygwin
+echo   - C:\Program Files\cygwin64
+echo   - C:\Program Files (x86)\cygwin64
 echo.
 echo Please install Cygwin from: https://cygwin.com/install.html
-echo Or set CYGWIN_ROOT environment variable to your Cygwin path.
 echo.
 pause
 exit /b 1
 
 :found_cygwin
+set "MINTTY=%CYGWIN_ROOT%\bin\mintty.exe"
+echo %GREEN%  Found Cygwin: %CYGWIN_ROOT%%RESET%
 
 :: ═══════════════════════════════════════════════════════════════════════════
 :: STEP 2: Download/Update script from GitHub
