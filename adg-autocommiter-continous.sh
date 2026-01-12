@@ -994,7 +994,7 @@ check_github_update() {
   local repo="${GITHUB_REPO:-adamerso/adg-autocommiter}"
   local branch="${GITHUB_BRANCH:-autocommit}"
   local version_url="https://raw.githubusercontent.com/${repo}/${branch}/VERSION"
-  local script_url="https://raw.githubusercontent.com/${repo}/${branch}/adg-autocommiter.sh"
+  local script_url="https://raw.githubusercontent.com/${repo}/${branch}/adg-autocommiter-continous.sh"
   
   log "🌐 Checking GitHub for updates..."
   
