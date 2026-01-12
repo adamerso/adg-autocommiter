@@ -31,7 +31,7 @@ if [[ "${AC5_RUNNING:-false}" == "true" ]]; then
   # ═══════════════════════════════════════════════════════════
   # CONFIGURABLE VARIABLES (edit these for hot-reload)
   # ═══════════════════════════════════════════════════════════
-  VERSION="7.2.0"
+  VERSION="7.2.1"
   
   # Hardening & safety
   AUTO_RESOLVE_SELF_CONFLICT=true   # Try to auto-resolve conflicts in this script
@@ -255,7 +255,7 @@ _safe_source() {
 # Initial variable load
 _safe_source || {
   # Fallback defaults if source fails
-  VERSION="${VERSION:-7.2.0}"
+  VERSION="${VERSION:-7.2.1}"
   COMMIT_TIMEOUT="${COMMIT_TIMEOUT:-180}"
   CHECK_EVERY="${CHECK_EVERY:-15}"
   PULL_EVERY="${PULL_EVERY:-30}"
@@ -561,14 +561,28 @@ self_conflict_guard() {
 show_stats() {
   local now=$(date +%s)
   local elapsed=$((now - SESSION_START))
-  local mins=$((elapsed / 60))
+  local hours=$((elapsed / 3600))
+  local mins=$(( (elapsed % 3600) / 60 ))
   local secs=$((elapsed % 60))
   local ver_info="loaded v$LOADED_VERSION"
   [[ "$LOADED_VERSION" != "$VERSION" ]] && ver_info="$ver_info, current v$VERSION"
   [[ "$RELOAD_ON_SHA_CHANGE" == "false" ]] && ver_info="$ver_info ⚠️"
-  printf "%b[%s %s @ %s]%b 📊 %dm%ds | C:%d M:%d F:%d L:+%d/-%d R:%d\n" \
-    "$C_PINK" "$SCRIPT_NAME" "$ver_info" "$(_ts)" "$C_RESET" \
-    "$mins" "$secs" "$STAT_COMMITS" "$STAT_MERGES" "$STAT_FILES" "$STAT_LINES_ADDED" "$STAT_LINES_REMOVED" "$STAT_NETWORK_RETRIES"
+  
+  # Line 1: Header with version and uptime
+  printf "%b[%s %s @ %s]%b\n" \
+    "$C_PINK" "$SCRIPT_NAME" "$ver_info" "$(_ts)" "$C_RESET"
+  
+  # Line 2: Uptime
+  if [[ $hours -gt 0 ]]; then
+    printf "  %b📊 Uptime:%b %dh %dm %ds\n" "$C_CYAN" "$C_RESET" "$hours" "$mins" "$secs"
+  else
+    printf "  %b📊 Uptime:%b %dm %ds\n" "$C_CYAN" "$C_RESET" "$mins" "$secs"
+  fi
+  
+  # Line 3: Stats with full names
+  printf "  %b📈 Stats:%b Commits: %d | Merges: %d | Files: %d | Lines: +%d/-%d | Retries: %d\n" \
+    "$C_CYAN" "$C_RESET" \
+    "$STAT_COMMITS" "$STAT_MERGES" "$STAT_FILES" "$STAT_LINES_ADDED" "$STAT_LINES_REMOVED" "$STAT_NETWORK_RETRIES"
 }
 
 # ═══════════════════════════════════════════════════════════
@@ -1373,7 +1387,7 @@ show_changes() {
 gen_commit_msg() {
   local total added modified renamed removed
   read -r total added modified renamed removed < <(count_changes)
-  echo "auto ${USER_NAME}@${HOST_NAME} $(date +"$DATE_FMT_COMMIT") +$added ~$modified →$renamed -$removed"
+  echo "auto ${USER_NAME}@${HOST_NAME} $(date +"$DATE_FMT_COMMIT") [+${added} new, ~${modified} mod, ${renamed} ren, -${removed} del]"
 }
 
 # ═══════════════════════════════════════════════════════════
