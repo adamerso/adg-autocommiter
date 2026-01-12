@@ -31,7 +31,7 @@ if [[ "${AC5_RUNNING:-false}" == "true" ]]; then
   # ═══════════════════════════════════════════════════════════
   # CONFIGURABLE VARIABLES (edit these for hot-reload)
   # ═══════════════════════════════════════════════════════════
-  VERSION="7.3.8"
+  VERSION="7.3.9"
   
   # Hardening & safety
   AUTO_RESOLVE_SELF_CONFLICT=true   # Try to auto-resolve conflicts in this script
@@ -63,7 +63,7 @@ if [[ "${AC5_RUNNING:-false}" == "true" ]]; then
   
   # Network retry settings
   NETWORK_RETRY_MAX=0              # 0 = infinite retries, >0 = max attempts
-  NETWORK_RETRY_BACKOFF="1 3 5 10 30 60 120 240"  # seconds between retries (cycles back to start)
+  NETWORK_RETRY_BACKOFF="1 3 5 10 30 60"  # seconds between retries (max 60s)
   GIT_TIMEOUT=120                  # timeout for git network operations (seconds)
   
   # Behavior
@@ -263,7 +263,7 @@ _safe_source || {
   MAX_FILE_SIZE_MB="${MAX_FILE_SIZE_MB:-99}"
   RELOAD_ON_SHA_CHANGE="${RELOAD_ON_SHA_CHANGE:-true}"
   NETWORK_RETRY_MAX="${NETWORK_RETRY_MAX:-5}"
-  NETWORK_RETRY_BACKOFF="${NETWORK_RETRY_BACKOFF:-1 3 5 10 20}"
+  NETWORK_RETRY_BACKOFF="${NETWORK_RETRY_BACKOFF:-1 3 5 10 30 60}"
   GIT_TIMEOUT="${GIT_TIMEOUT:-120}"
 }
 
