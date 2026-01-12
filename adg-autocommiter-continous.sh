@@ -31,7 +31,7 @@ if [[ "${AC5_RUNNING:-false}" == "true" ]]; then
   # ═══════════════════════════════════════════════════════════
   # CONFIGURABLE VARIABLES (edit these for hot-reload)
   # ═══════════════════════════════════════════════════════════
-  VERSION="7.3.0"
+  VERSION="7.3.1"
   
   # Hardening & safety
   AUTO_RESOLVE_SELF_CONFLICT=true   # Try to auto-resolve conflicts in this script
@@ -504,6 +504,30 @@ ensure_remote_access() {
   [[ "$REMOTE_PROTOCOL_FALLBACK" != "true" ]] && return 0
   local out
   out=$($GIT ls-remote --heads origin 2>&1) && return 0
+  
+  # Check for HTTPS credential issues
+  if echo "$out" | grep -qiE 'could not read Username|terminal prompts disabled|askpass'; then
+    printf "\n"
+    printf "%b╔══════════════════════════════════════════════════════════════╗%b\n" "$C_RED" "$C_RESET"
+    printf "%b║%b  ⚠️  GIT AUTHENTICATION REQUIRED                              %b║%b\n" "$C_RED" "$C_YELLOW" "$C_RED" "$C_RESET"
+    printf "%b╠══════════════════════════════════════════════════════════════╣%b\n" "$C_RED" "$C_RESET"
+    printf "%b║%b  Git cannot connect to GitHub - credentials not configured   %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
+    printf "%b║%b                                                              %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
+    printf "%b║%b  %bFix options (run in terminal):%b                              %b║%b\n" "$C_RED" "$C_RESET" "$C_GREEN" "$C_RESET" "$C_RED" "$C_RESET"
+    printf "%b║%b                                                              %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
+    printf "%b║%b  1. %bgh auth login%b        (GitHub CLI - easiest)             %b║%b\n" "$C_RED" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_RED" "$C_RESET"
+    printf "%b║%b                                                              %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
+    printf "%b║%b  2. %bgit config --global credential.helper manager%b           %b║%b\n" "$C_RED" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_RED" "$C_RESET"
+    printf "%b║%b     then: %bgit fetch origin%b (enter credentials once)        %b║%b\n" "$C_RED" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_RED" "$C_RESET"
+    printf "%b║%b                                                              %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
+    printf "%b║%b  3. Create Personal Access Token at:                        %b║%b\n" "$C_RED" "$C_RESET" "$C_RED" "$C_RESET"
+    printf "%b║%b     %bhttps://github.com/settings/tokens%b                      %b║%b\n" "$C_RED" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_RED" "$C_RESET"
+    printf "%b╚══════════════════════════════════════════════════════════════╝%b\n" "$C_RED" "$C_RESET"
+    printf "\n"
+    warn "Continuing in offline mode (local commits only)..."
+    return 1
+  fi
+  
   if echo "$out" | grep -qiE 'permission denied|publickey|repository access|authentication failed'; then
     local url=$($GIT remote get-url origin 2>/dev/null || echo "")
     if [[ "$url" =~ ^git@github\.com:([^/]+)/([^/]+)\.git$ ]]; then
@@ -1770,6 +1794,9 @@ _heartbeat
 # STARTUP SEQUENCE
 # ═══════════════════════════════════════════════════════════
 
+# 0. Check remote access FIRST (shows helpful error if credentials missing)
+ensure_remote_access || warn "Remote access issue - will work in offline mode"
+
 # 1. Handle pipe input if present
 handle_pipe_input || true
 
@@ -1791,7 +1818,6 @@ check_large_files
 # 3.1 Repo hardening and self-conflict guard
 self_conflict_guard || true
 detect_repo_in_progress || true
-ensure_remote_access || true
 
 # 4. Startup push - push any pending commits!
 do_startup_push || true
