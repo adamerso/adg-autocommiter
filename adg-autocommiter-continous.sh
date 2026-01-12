@@ -1,11 +1,14 @@
 #!bash
 # =======================
-# ADG AUTO-COMMITER 7.2.0  ♥ I<3U ♥
+# ADG AUTO-COMMITER 7.3.12  ♥ I<3U ♥
 # =======================
-# v7.2.0 - GITHUB AUTO-UPDATE:
-# - Auto-check for newer version on GitHub
-# - Download and apply updates automatically
-# - Configurable update interval (default: 5 min)
+# v7.3.12 - INFINITE LOOP FIX:
+# - Prevent infinite loop in auto-resolve (max 5 attempts)
+# - check_github_update called on every resolve attempt
+# - Hard reset fallback after max attempts
+# v7.3.11 - DOWNLOAD FIX:
+# - Use wget as primary downloader (curl has issues on Cygwin)
+# - Better diagnostics for download failures
 # v7.1.x features:
 # - Dedicated 'autocommit' branch for multi-PC sync
 # - Smart merge: newer work commits win (author date)
@@ -31,7 +34,7 @@ if [[ "${AC5_RUNNING:-false}" == "true" ]]; then
   # ═══════════════════════════════════════════════════════════
   # CONFIGURABLE VARIABLES (edit these for hot-reload)
   # ═══════════════════════════════════════════════════════════
-  VERSION="7.3.11"
+  VERSION="7.3.12"
   
   # Hardening & safety
   AUTO_RESOLVE_SELF_CONFLICT=true   # Try to auto-resolve conflicts in this script
@@ -655,6 +658,8 @@ network_retry() {
   local max_attempts=$NETWORK_RETRY_MAX
   local backoff_len=${#backoff_arr[@]}
   local git_output=""
+  local resolve_attempts=0  # Track auto-resolve attempts to prevent infinite loops
+  local MAX_RESOLVE_ATTEMPTS=5  # Max times to try auto-resolve before giving up
 
   # Infinite loop when max_attempts=0, otherwise limited
   while [[ $max_attempts -eq 0 ]] || [[ $attempt -lt $max_attempts ]]; do
@@ -683,7 +688,24 @@ network_retry() {
 
     # Check for unmerged files blocking pull - AUTO-RESOLVE with "newer wins"!
     if echo "$git_output" | grep -qiE 'you have unmerged files|not possible because you have unmerged|fix conflicts and then|Unmerged paths'; then
-      warn "🔧 Unmerged files detected - auto-resolving (newer wins)..."
+      resolve_attempts=$((resolve_attempts + 1))
+      
+      # Check for update on every resolve attempt - maybe new version fixes the bug!
+      check_github_update 2>/dev/null || true
+      
+      # Prevent infinite resolve loop
+      if [[ $resolve_attempts -ge $MAX_RESOLVE_ATTEMPTS ]]; then
+        warn "⚠️ Auto-resolve tried $resolve_attempts times - giving up on merge, using hard reset"
+        $GIT merge --abort 2>/dev/null || true
+        $GIT rebase --abort 2>/dev/null || true
+        # Hard reset to remote - accept theirs
+        $GIT fetch origin 2>/dev/null || true
+        $GIT reset --hard "origin/$($GIT branch --show-current 2>/dev/null)" 2>/dev/null || true
+        resolve_attempts=0
+        continue
+      fi
+      
+      warn "🔧 Unmerged files detected - auto-resolving (newer wins)... [attempt $resolve_attempts/$MAX_RESOLVE_ATTEMPTS]"
       
       # Get list of unmerged files
       local unmerged_files=$($GIT diff --name-only --diff-filter=U 2>/dev/null)
@@ -712,6 +734,7 @@ network_retry() {
         # Complete the merge
         if $GIT commit --no-edit -m "auto-merge: resolved conflicts (newer wins)" 2>/dev/null; then
           ok "Conflicts resolved automatically, retrying $desc..."
+          resolve_attempts=0  # Reset on success
           continue  # Retry immediately
         else
           # Maybe nothing to commit (all resolved same way)
