@@ -31,7 +31,7 @@ if [[ "${AC5_RUNNING:-false}" == "true" ]]; then
   # ═══════════════════════════════════════════════════════════
   # CONFIGURABLE VARIABLES (edit these for hot-reload)
   # ═══════════════════════════════════════════════════════════
-  VERSION="7.3.5"
+  VERSION="7.3.6"
   
   # Hardening & safety
   AUTO_RESOLVE_SELF_CONFLICT=true   # Try to auto-resolve conflicts in this script
@@ -801,10 +801,14 @@ network_retry() {
     info "🔄 Retry $attempt_info in ${delay}s..."
     STAT_NETWORK_RETRIES=$((STAT_NETWORK_RETRIES + 1))
     _heartbeat
+    
+    # ALWAYS check for updates during retry wait - maybe new version fixes the problem!
+    check_github_update 2>/dev/null || true
+    
     sleep "$delay"
 
-    # Auto-reload during wait (if enabled)
-    if [[ "$RELOAD_ON_SHA_CHANGE" == "true" ]] && [[ $delay -ge 10 ]]; then
+    # Auto-reload during wait (if enabled and delay is long enough)
+    if [[ "$RELOAD_ON_SHA_CHANGE" == "true" ]] && [[ $delay -ge 5 ]]; then
       do_reload 2>/dev/null || true
     fi
   done
