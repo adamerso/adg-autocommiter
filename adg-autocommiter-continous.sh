@@ -31,7 +31,7 @@ if [[ "${AC5_RUNNING:-false}" == "true" ]]; then
   # ═══════════════════════════════════════════════════════════
   # CONFIGURABLE VARIABLES (edit these for hot-reload)
   # ═══════════════════════════════════════════════════════════
-  VERSION="7.2.1"
+  VERSION="7.3.0"
   
   # Hardening & safety
   AUTO_RESOLVE_SELF_CONFLICT=true   # Try to auto-resolve conflicts in this script
@@ -973,6 +973,43 @@ do_full_restart() {
 }
 
 # ═══════════════════════════════════════════════════════════
+# SELF-GITIGNORE - add script to .gitignore (live update!)
+# Since we have GitHub auto-update, script shouldn't be
+# committed to user's repo - it updates itself!
+# ═══════════════════════════════════════════════════════════
+ensure_self_gitignore() {
+  local script_name
+  script_name="$(basename "$SCRIPT_FILE")"
+  local gitignore_path="${GIT_ROOT}/.gitignore"
+  
+  # Also ignore trampoline files
+  local patterns=("$script_name" ".gowno_*.sh")
+  
+  local added=0
+  
+  for pattern in "${patterns[@]}"; do
+    # Check if already in .gitignore
+    if [[ -f "$gitignore_path" ]]; then
+      # Use grep with fixed string for exact match (line by line)
+      if grep -qxF "$pattern" "$gitignore_path" 2>/dev/null; then
+        continue  # Already there
+      fi
+    fi
+    
+    # Add to .gitignore
+    echo "$pattern" >> "$gitignore_path"
+    added=$((added + 1))
+  done
+  
+  if [[ $added -gt 0 ]]; then
+    ok "🛡️ Added $added pattern(s) to .gitignore (live update protection)"
+    log "   Patterns: ${patterns[*]}"
+  fi
+  
+  return 0
+}
+
+# ═══════════════════════════════════════════════════════════
 # GITHUB AUTO-UPDATE - check for newer version on GitHub
 # Downloads new version if available, then existing reload
 # mechanism detects SHA change and restarts
@@ -1744,6 +1781,9 @@ fi
 # 3. CRITICAL: Ensure we're on autocommit branch!
 info "🚀 Setting up autocommit branch..."
 ensure_autocommit_branch || warn "Could not setup autocommit branch"
+
+# 3.5 Add self to .gitignore (live update protection!)
+ensure_self_gitignore || true
 
 # 4. Initial check for large files
 check_large_files
