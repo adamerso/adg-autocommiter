@@ -31,7 +31,7 @@ if [[ "${AC5_RUNNING:-false}" == "true" ]]; then
   # ═══════════════════════════════════════════════════════════
   # CONFIGURABLE VARIABLES (edit these for hot-reload)
   # ═══════════════════════════════════════════════════════════
-  VERSION="7.3.9"
+  VERSION="7.3.10"
   
   # Hardening & safety
   AUTO_RESOLVE_SELF_CONFLICT=true   # Try to auto-resolve conflicts in this script
@@ -1208,7 +1208,28 @@ check_github_update() {
     
     # Download to temp file first
     local tmp_script="${SCRIPT_FILE}.github-update.tmp"
-    if curl -sL --connect-timeout 10 --max-time 60 "$script_url" -o "$tmp_script" 2>/dev/null; then
+    local curl_exit=0
+    local curl_output=""
+    
+    # Try curl with verbose error capture
+    curl_output=$(curl -sL --connect-timeout 10 --max-time 60 -w "%{http_code}" "$script_url" -o "$tmp_script" 2>&1)
+    curl_exit=$?
+    
+    # Debug output
+    if [[ $curl_exit -ne 0 ]]; then
+      warn "curl failed with exit code: $curl_exit"
+      warn "curl output: $curl_output"
+      
+      # Try wget as fallback
+      if command -v wget &>/dev/null; then
+        info "Trying wget as fallback..."
+        if wget -q --timeout=30 -O "$tmp_script" "$script_url" 2>/dev/null; then
+          curl_exit=0
+        fi
+      fi
+    fi
+    
+    if [[ $curl_exit -eq 0 ]] && [[ -f "$tmp_script" ]] && [[ -s "$tmp_script" ]]; then
       # Verify download - check if it has VERSION string
       if grep -q "^  VERSION=" "$tmp_script" 2>/dev/null; then
         # Check syntax
@@ -1224,13 +1245,15 @@ check_github_update() {
           return 1
         fi
       else
-        warn "Downloaded file doesn't look like valid script - keeping current version"
+        warn "Downloaded file doesn't look like valid script (missing VERSION)"
+        warn "File size: $(wc -c < "$tmp_script" 2>/dev/null || echo 0) bytes"
+        head -5 "$tmp_script" 2>/dev/null | while read line; do warn "  > $line"; done
         rm -f "$tmp_script" 2>/dev/null
         return 1
       fi
     else
       warn "Failed to download new version from GitHub"
-      rm -f "$tmp_script" 2>/dev/null
+      [[ -f "$tmp_script" ]] && rm -f "$tmp_script" 2>/dev/null
       return 1
     fi
     
