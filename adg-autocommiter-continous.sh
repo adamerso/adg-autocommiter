@@ -31,7 +31,7 @@ if [[ "${AC5_RUNNING:-false}" == "true" ]]; then
   # ═══════════════════════════════════════════════════════════
   # CONFIGURABLE VARIABLES (edit these for hot-reload)
   # ═══════════════════════════════════════════════════════════
-  VERSION="7.3.7"
+  VERSION="7.3.8"
   
   # Hardening & safety
   AUTO_RESOLVE_SELF_CONFLICT=true   # Try to auto-resolve conflicts in this script
@@ -680,6 +680,53 @@ network_retry() {
     # ═══════════════════════════════════════════════════════════
     # HANDLE SPECIAL GIT ERRORS
     # ═══════════════════════════════════════════════════════════
+
+    # Check for unmerged files blocking pull - AUTO-RESOLVE with "newer wins"!
+    if echo "$git_output" | grep -qiE 'you have unmerged files|not possible because you have unmerged|fix conflicts and then|Unmerged paths'; then
+      warn "🔧 Unmerged files detected - auto-resolving (newer wins)..."
+      
+      # Get list of unmerged files
+      local unmerged_files=$($GIT diff --name-only --diff-filter=U 2>/dev/null)
+      
+      if [[ -n "$unmerged_files" ]]; then
+        echo "$unmerged_files" | while read -r file; do
+          if [[ -n "$file" ]]; then
+            info "  Resolving: $file"
+            
+            # Get timestamps of ours vs theirs
+            local ours_time theirs_time
+            ours_time=$($GIT log -1 --format="%at" HEAD -- "$file" 2>/dev/null || echo "0")
+            theirs_time=$($GIT log -1 --format="%at" MERGE_HEAD -- "$file" 2>/dev/null || echo "0")
+            
+            if [[ "$theirs_time" -gt "$ours_time" ]]; then
+              info "    → Theirs is newer, accepting remote version"
+              $GIT checkout --theirs -- "$file" 2>/dev/null
+            else
+              info "    → Ours is newer, keeping local version"
+              $GIT checkout --ours -- "$file" 2>/dev/null
+            fi
+            $GIT add -- "$file" 2>/dev/null
+          fi
+        done
+        
+        # Complete the merge
+        if $GIT commit --no-edit -m "auto-merge: resolved conflicts (newer wins)" 2>/dev/null; then
+          ok "Conflicts resolved automatically, retrying $desc..."
+          continue  # Retry immediately
+        else
+          # Maybe nothing to commit (all resolved same way)
+          $GIT merge --abort 2>/dev/null || true
+          ok "Merge state cleaned up, retrying $desc..."
+          continue
+        fi
+      else
+        # No specific files, just abort and retry
+        warn "  Aborting stuck merge state..."
+        $GIT merge --abort 2>/dev/null || true
+        $GIT rebase --abort 2>/dev/null || true
+        continue
+      fi
+    fi
 
     # Check for untracked files blocking merge/pull
     if echo "$git_output" | grep -q "untracked working tree files would be overwritten"; then
