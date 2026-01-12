@@ -2,30 +2,28 @@
 setlocal EnableDelayedExpansion
 
 :: ═══════════════════════════════════════════════════════════════════════════
-:: ADG Auto-Commiter Launcher v1.0
+:: ADG Auto-Commiter Launcher v1.1
 :: Downloads latest version and runs in Cygwin mintty
-:: Just double-click to run!
+:: Self-updates from GitHub!
 :: ═══════════════════════════════════════════════════════════════════════════
 
-title ADG Auto-Commiter Launcher
+set "LAUNCHER_VERSION=1.1"
+
+title ADG Auto-Commiter Launcher v%LAUNCHER_VERSION%
 
 :: Colors for pretty output
 set "GREEN=[92m"
 set "YELLOW=[93m"
 set "CYAN=[96m"
 set "RED=[91m"
+set "MAGENTA=[95m"
 set "RESET=[0m"
 
-echo.
-echo %CYAN%╔══════════════════════════════════════════════════════════════╗%RESET%
-echo %CYAN%║%RESET%  %GREEN%ADG Auto-Commiter Launcher%RESET%                                 %CYAN%║%RESET%
-echo %CYAN%║%RESET%  Downloads latest version and runs in Cygwin mintty         %CYAN%║%RESET%
-echo %CYAN%╚══════════════════════════════════════════════════════════════╝%RESET%
-echo.
-
-:: Get current directory (where this launcher is)
+:: Get current directory and launcher path
 set "LAUNCH_DIR=%~dp0"
 set "LAUNCH_DIR=%LAUNCH_DIR:~0,-1%"
+set "LAUNCHER_PATH=%~f0"
+set "LAUNCHER_NAME=%~nx0"
 set "SCRIPT_NAME=adg-autocommiter-continous.sh"
 set "SCRIPT_PATH=%LAUNCH_DIR%\%SCRIPT_NAME%"
 
@@ -33,11 +31,90 @@ set "SCRIPT_PATH=%LAUNCH_DIR%\%SCRIPT_NAME%"
 set "GITHUB_RAW=https://raw.githubusercontent.com/adamerso/adg-autocommiter/autocommit"
 set "VERSION_URL=%GITHUB_RAW%/VERSION"
 set "SCRIPT_URL=%GITHUB_RAW%/adg-autocommiter-continous.sh"
+set "LAUNCHER_URL=%GITHUB_RAW%/adg-autocommiter-launcher.cmd"
+set "LAUNCHER_VERSION_URL=%GITHUB_RAW%/LAUNCHER_VERSION"
+
+:: Check if we have curl
+where curl >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    set "USE_CURL=1"
+) else (
+    set "USE_CURL=0"
+)
+
+:: ═══════════════════════════════════════════════════════════════════════════
+:: STEP 0: Self-update launcher
+:: ═══════════════════════════════════════════════════════════════════════════
+:: Skip if already relaunched (prevent infinite loop)
+if "%ADG_RELAUNCHED%"=="1" goto :skip_self_update
+
+echo.
+echo %MAGENTA%[0/4]%RESET% Checking for launcher updates...
+
+set "REMOTE_LAUNCHER_VERSION="
+if "%USE_CURL%"=="1" (
+    for /f "delims=" %%V in ('curl -sL --connect-timeout 3 "%LAUNCHER_VERSION_URL%" 2^>nul') do set "REMOTE_LAUNCHER_VERSION=%%V"
+) else (
+    for /f "delims=" %%V in ('powershell -Command "(Invoke-WebRequest -Uri '%LAUNCHER_VERSION_URL%' -TimeoutSec 3 -UseBasicParsing).Content.Trim()" 2^>nul') do set "REMOTE_LAUNCHER_VERSION=%%V"
+)
+
+if "%REMOTE_LAUNCHER_VERSION%"=="" (
+    echo %YELLOW%  Could not check launcher version%RESET%
+    goto :skip_self_update
+)
+
+echo   Launcher: v%LAUNCHER_VERSION% / Remote: v%REMOTE_LAUNCHER_VERSION%
+
+if "%REMOTE_LAUNCHER_VERSION%"=="%LAUNCHER_VERSION%" (
+    echo %GREEN%  Launcher up to date%RESET%
+    goto :skip_self_update
+)
+
+:: Download new launcher to temp file
+echo %YELLOW%  New launcher available, updating...%RESET%
+set "TEMP_LAUNCHER=%TEMP%\adg-launcher-new-%RANDOM%.cmd"
+
+if "%USE_CURL%"=="1" (
+    curl -sL --connect-timeout 10 -o "%TEMP_LAUNCHER%" "%LAUNCHER_URL%" 2>nul
+) else (
+    powershell -Command "Invoke-WebRequest -Uri '%LAUNCHER_URL%' -OutFile '%TEMP_LAUNCHER%' -TimeoutSec 15 -UseBasicParsing" 2>nul
+)
+
+if not exist "%TEMP_LAUNCHER%" (
+    echo %RED%  Download failed, continuing with current version%RESET%
+    goto :skip_self_update
+)
+
+:: Create relaunch script that replaces launcher and restarts
+set "RELAUNCH_SCRIPT=%TEMP%\adg-relaunch-%RANDOM%.cmd"
+(
+    echo @echo off
+    echo timeout /t 1 /nobreak ^>nul
+    echo copy /Y "%TEMP_LAUNCHER%" "%LAUNCHER_PATH%" ^>nul
+    echo del "%TEMP_LAUNCHER%" ^>nul 2^>^&1
+    echo set "ADG_RELAUNCHED=1"
+    echo cd /d "%LAUNCH_DIR%"
+    echo call "%LAUNCHER_PATH%"
+    echo del "%RELAUNCH_SCRIPT%" ^>nul 2^>^&1
+) > "%RELAUNCH_SCRIPT%"
+
+echo %GREEN%  Downloaded v%REMOTE_LAUNCHER_VERSION%, relaunching...%RESET%
+start "" cmd /c "%RELAUNCH_SCRIPT%"
+exit /b 0
+
+:skip_self_update
+
+echo.
+echo %CYAN%╔══════════════════════════════════════════════════════════════╗%RESET%
+echo %CYAN%║%RESET%  %GREEN%ADG Auto-Commiter Launcher v%LAUNCHER_VERSION%%RESET%                          %CYAN%║%RESET%
+echo %CYAN%║%RESET%  Downloads latest version and runs in Cygwin mintty         %CYAN%║%RESET%
+echo %CYAN%╚══════════════════════════════════════════════════════════════╝%RESET%
+echo.
 
 :: ═══════════════════════════════════════════════════════════════════════════
 :: STEP 1: Find Cygwin installation
 :: ═══════════════════════════════════════════════════════════════════════════
-echo %YELLOW%[1/3]%RESET% Searching for Cygwin installation...
+echo %YELLOW%[1/4]%RESET% Searching for Cygwin installation...
 
 set "CYGWIN_ROOT="
 set "MINTTY="
@@ -108,7 +185,7 @@ echo %GREEN%  Found Cygwin: %CYGWIN_ROOT%%RESET%
 :: ═══════════════════════════════════════════════════════════════════════════
 :: STEP 2: Download/Update script from GitHub
 :: ═══════════════════════════════════════════════════════════════════════════
-echo %YELLOW%[2/3]%RESET% Checking for updates from GitHub...
+echo %YELLOW%[2/4]%RESET% Checking for script updates...
 
 :: Check if we have curl (usually available on Windows 10+)
 where curl >nul 2>&1
@@ -175,7 +252,7 @@ if "%NEED_DOWNLOAD%"=="1" (
 :: ═══════════════════════════════════════════════════════════════════════════
 :: STEP 3: Launch mintty with the script
 :: ═══════════════════════════════════════════════════════════════════════════
-echo %YELLOW%[3/3]%RESET% Launching ADG Auto-Commiter in mintty...
+echo %YELLOW%[3/4]%RESET% Launching ADG Auto-Commiter in mintty...
 
 :: Convert Windows path to Cygwin path
 set "CYGWIN_SCRIPT_PATH=%SCRIPT_PATH:\=/%"
