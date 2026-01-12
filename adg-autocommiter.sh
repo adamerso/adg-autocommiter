@@ -1,16 +1,16 @@
 #!bash
 # =======================
-# ADG AUTO-COMMITER 7.1.1  ♥ I<3U ♥
+# ADG AUTO-COMMITER 7.2.0  ♥ I<3U ♥
 # =======================
-# v7.1.1 - CLOUD EXPERIENCE with AUTOCOMMIT BRANCH:
-# - FIX: Use AUTHOR date (not committer date) for "newer wins"
-# - FIX: Skip merge commits when comparing timestamps
+# v7.2.0 - GITHUB AUTO-UPDATE:
+# - Auto-check for newer version on GitHub
+# - Download and apply updates automatically
+# - Configurable update interval (default: 5 min)
+# v7.1.x features:
 # - Dedicated 'autocommit' branch for multi-PC sync
-# - Auto-create and switch to autocommit branch on startup
-# - Merge from main/master on first run
+# - Smart merge: newer work commits win (author date)
+# - Skip merge commits when comparing timestamps
 # - GIT_ROOT detection (works in nested subdirectories)
-# - Per-repo lockfile (multiple instances on different repos)
-# - Smart merge: "newer wins" based on commit timestamps
 # =======================
 
 # ═══════════════════════════════════════════════════════════
@@ -31,7 +31,7 @@ if [[ "${AC5_RUNNING:-false}" == "true" ]]; then
   # ═══════════════════════════════════════════════════════════
   # CONFIGURABLE VARIABLES (edit these for hot-reload)
   # ═══════════════════════════════════════════════════════════
-  VERSION="7.1.1"
+  VERSION="7.2.0"
   
   # Hardening & safety
   AUTO_RESOLVE_SELF_CONFLICT=true   # Try to auto-resolve conflicts in this script
@@ -45,6 +45,12 @@ if [[ "${AC5_RUNNING:-false}" == "true" ]]; then
   CONFLICT_STRATEGY="newer-wins"    # Options: "newer-wins", "ours", "theirs"
   AUTOCOMMIT_BRANCH="autocommit"    # Dedicated branch for auto-commits (all PCs sync here)
   SYNC_FROM_MAIN=true               # On startup, merge latest main/master into autocommit
+  
+  # GitHub Auto-Update
+  GITHUB_UPDATE_CHECK=true          # Check for newer version on GitHub
+  GITHUB_REPO="adamerso/adg-autocommiter"   # GitHub repo to check
+  GITHUB_BRANCH="autocommit"        # Branch to check for updates
+  GITHUB_UPDATE_INTERVAL=300        # Check every N seconds (default: 5 min)
   
   # Timing
   COMMIT_TIMEOUT=180       # seconds before auto-commit (3 min)
@@ -249,7 +255,7 @@ _safe_source() {
 # Initial variable load
 _safe_source || {
   # Fallback defaults if source fails
-  VERSION="${VERSION:-7.1.1}"
+  VERSION="${VERSION:-7.2.0}"
   COMMIT_TIMEOUT="${COMMIT_TIMEOUT:-180}"
   CHECK_EVERY="${CHECK_EVERY:-15}"
   PULL_EVERY="${PULL_EVERY:-30}"
@@ -953,9 +959,101 @@ do_full_restart() {
 }
 
 # ═══════════════════════════════════════════════════════════
+# GITHUB AUTO-UPDATE - check for newer version on GitHub
+# Downloads new version if available, then existing reload
+# mechanism detects SHA change and restarts
+# ═══════════════════════════════════════════════════════════
+LAST_GITHUB_CHECK=0
+
+check_github_update() {
+  # Skip if disabled
+  [[ "${GITHUB_UPDATE_CHECK:-true}" != "true" ]] && return 0
+  
+  # Rate limit - don't check too often
+  local now=$(date +%s)
+  local interval=${GITHUB_UPDATE_INTERVAL:-300}
+  if (( now - LAST_GITHUB_CHECK < interval )); then
+    return 0
+  fi
+  LAST_GITHUB_CHECK=$now
+  
+  local repo="${GITHUB_REPO:-adamerso/adg-autocommiter}"
+  local branch="${GITHUB_BRANCH:-autocommit}"
+  local version_url="https://raw.githubusercontent.com/${repo}/${branch}/VERSION"
+  local script_url="https://raw.githubusercontent.com/${repo}/${branch}/adg-autocommiter.sh"
+  
+  log "🌐 Checking GitHub for updates..."
+  
+  # Fetch remote VERSION with timeout
+  local remote_version
+  remote_version=$(curl -sL --connect-timeout 5 --max-time 10 "$version_url" 2>/dev/null | tr -d '\r\n ')
+  
+  if [[ -z "$remote_version" ]]; then
+    log "Could not fetch remote version (network issue?)"
+    return 1
+  fi
+  
+  # Compare versions
+  version_compare "$VERSION" "$remote_version"
+  local cmp_result=$?
+  
+  if [[ $cmp_result -eq 2 ]]; then
+    # Remote is newer!
+    printf "\n"
+    printf "%b╔══════════════════════════════════════════════════════════════╗%b\n" "$C_GREEN" "$C_RESET"
+    printf "%b║%b  🚀 NEW VERSION AVAILABLE ON GITHUB!                          %b║%b\n" "$C_GREEN" "$C_RESET" "$C_GREEN" "$C_RESET"
+    printf "%b║%b  Current: v%-10s  →  Available: v%-10s          %b║%b\n" "$C_GREEN" "$C_RESET" "$VERSION" "$remote_version" "$C_GREEN" "$C_RESET"
+    printf "%b╚══════════════════════════════════════════════════════════════╝%b\n" "$C_GREEN" "$C_RESET"
+    printf "\n"
+    
+    info "Downloading new version from GitHub..."
+    
+    # Download to temp file first
+    local tmp_script="${SCRIPT_FILE}.github-update.tmp"
+    if curl -sL --connect-timeout 10 --max-time 60 "$script_url" -o "$tmp_script" 2>/dev/null; then
+      # Verify download - check if it has VERSION string
+      if grep -q "^  VERSION=" "$tmp_script" 2>/dev/null; then
+        # Check syntax
+        if bash -n "$tmp_script" 2>/dev/null; then
+          # All good - replace current script
+          cp "$tmp_script" "$SCRIPT_FILE" 2>/dev/null
+          rm -f "$tmp_script" 2>/dev/null
+          ok "Downloaded v$remote_version from GitHub - reload will happen automatically!"
+          return 0
+        else
+          warn "Downloaded script has syntax errors - keeping current version"
+          rm -f "$tmp_script" 2>/dev/null
+          return 1
+        fi
+      else
+        warn "Downloaded file doesn't look like valid script - keeping current version"
+        rm -f "$tmp_script" 2>/dev/null
+        return 1
+      fi
+    else
+      warn "Failed to download new version from GitHub"
+      rm -f "$tmp_script" 2>/dev/null
+      return 1
+    fi
+    
+  elif [[ $cmp_result -eq 1 ]]; then
+    # Local is newer (development version?)
+    log "Local version (v$VERSION) is newer than GitHub (v$remote_version)"
+    return 0
+  else
+    # Same version
+    log "Up to date (v$VERSION)"
+    return 0
+  fi
+}
+
+# ═══════════════════════════════════════════════════════════
 # SAFE SELF-RELOAD (via tmp file)
 # ═══════════════════════════════════════════════════════════
 do_reload() {
+  # First, check GitHub for updates (will overwrite file if newer)
+  check_github_update || true
+  
   local old_version="$VERSION"
   info "♻️  Reloading variables (loaded: v$LOADED_VERSION, current: v$old_version)..."
   
